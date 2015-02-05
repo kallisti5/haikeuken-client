@@ -69,6 +69,11 @@ if status_host && status_os && status_arch
 	hostname.delete!("\n")
 	platform.delete!("\n")
 	architecture.delete!("\n")
+
+	# Check for default hostname
+	if hostname == "shredder"
+		error("Default hostname of #{hostname} detected. Change it to something unique.")
+	end
 	puts "Starting buildslave on #{hostname} (#{platform}, #{architecture})"
 else
 	error("Error pulling machine information!")
