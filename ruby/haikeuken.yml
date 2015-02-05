@@ -1,0 +1,10 @@
+# 
+# Example Haikeuken configuration file
+#
+
+general:
+  work_path: "/Builds"
+  token: "changeme"
+
+server:
+  url: "http://haikeuken.net"
