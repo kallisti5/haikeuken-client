@@ -78,7 +78,7 @@ begin
 	if platform == "Linux"
 		settings_dir, status = Open3.capture2e("echo -n ~")
 		warning("Running on Linux. We don't support non-native platforms yet.")
-	elsif platorm == "Haiku"
+	elsif platform == "Haiku"
 		settings_dir, status = Open3.capture2e("finddir", "B_USER_SETTINGS_DIRECTORY")
 		settings_dir.delete!("\n")
 	end
