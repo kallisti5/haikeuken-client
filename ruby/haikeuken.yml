@@ -7,4 +7,4 @@ general:
   token: "changeme"
 
 server:
-  url: "http://haikeuken.net"
+  url: "http://hinansho.net:3000"

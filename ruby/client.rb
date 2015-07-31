@@ -15,33 +15,37 @@
 require 'json'
 require 'net/http'
 require 'yaml'
-require 'open3'
-
-if Gem::Specification::find_all_by_name('colorize').any?
-	require 'colorize'
-	@color_support = true
-else
-	@color_support = false
-end
 ##########################################
 
+class String
+def black;          "\033[30m#{self}\033[0m" end
+def red;            "\033[31m#{self}\033[0m" end
+def green;          "\033[32m#{self}\033[0m" end
+def brown;          "\033[33m#{self}\033[0m" end
+def blue;           "\033[34m#{self}\033[0m" end
+def magenta;        "\033[35m#{self}\033[0m" end
+def cyan;           "\033[36m#{self}\033[0m" end
+def gray;           "\033[37m#{self}\033[0m" end
+def bg_black;       "\033[40m#{self}\033[0m" end
+def bg_red;         "\033[41m#{self}\033[0m" end
+def bg_green;       "\033[42m#{self}\033[0m" end
+def bg_brown;       "\033[43m#{self}\033[0m" end
+def bg_blue;        "\033[44m#{self}\033[0m" end
+def bg_magenta;     "\033[45m#{self}\033[0m" end
+def bg_cyan;        "\033[46m#{self}\033[0m" end
+def bg_gray;        "\033[47m#{self}\033[0m" end
+def bold;           "\033[1m#{self}\033[22m" end
+def reverse_color;  "\033[7m#{self}\033[27m" end
+end
 
 ##########################################
 # Helper functions
 def warning(message)
-	if @color_support
-		puts "Warning: #{message}".colorize(:yellow)
-	else
-		puts "Warning: #{message}"
-	end
+	puts "Warning: #{message}".blue
 end
 
 def error(message)
-	if @color_support
-		puts "Error: #{message}".colorize(:red)
-	else
-		puts "Error: #{message}"
-	end
+	puts "Error: #{message}".red
 	exit 1
 end
 #
@@ -60,31 +64,29 @@ puts "                Version #{@version}"
 puts ''
 
 # Load some basic platform info
-hostname, status_host = Open3.capture2e("uname -n")
-platform, status_os = Open3.capture2e("uname -s")
-architecture, status_arch = Open3.capture2e("uname -m")
+hostname = `uname -n`
+platform = `uname -s`
+architecture = `uname -m`
 
-if status_host && status_os && status_arch
-	# Clean up vars
-	hostname.delete!("\n")
-	platform.delete!("\n")
-	architecture.delete!("\n")
+# Clean up vars
+hostname.delete!("\n")
+platform.delete!("\n")
+architecture.delete!("\n")
 
-	# Check for default hostname
-	if hostname == "shredder"
-		error("Default hostname of #{hostname} detected. Change it to something unique.")
-	end
-	puts "Starting buildslave on #{hostname} (#{platform}, #{architecture})"
-else
-	error("Error pulling machine information!")
+# Check for default hostname
+if hostname == "shredder"
+	error("Default hostname of #{hostname} detected. Change it to something unique.")
 end
+puts "Starting buildslave on #{hostname} (#{platform}, #{architecture})"
+
+threads = `sysinfo | grep 'CPU #' | wc -l`.to_i
 
 begin
 	if platform == "Linux"
-		settings_dir, status = Open3.capture2e("echo -n ~")
+		settings_dir = `echo -n ~`
 		warning("Running on Linux. We don't support non-native platforms yet.")
 	elsif platform == "Haiku"
-		settings_dir, status = Open3.capture2e("finddir", "B_USER_SETTINGS_DIRECTORY")
+		settings_dir = `finddir B_USER_SETTINGS_DIRECTORY`
 		settings_dir.delete!("\n")
 	end
 	# Load settings YAML
@@ -175,22 +177,21 @@ def loop()
 		puts "- No work available"
 		return 0
 	end
-	
+
 	work.each do |task|
 		puts "+ Work received"
 		#worklog = "/tmp/#{task['name']}-#{task['version']}-#{task['revision']}.log"
 		puts "+ Building #{task['name']}-#{task['version']}-#{task['revision']}"
-		worklog, result = Open3.capture2e("#{@settings['general']['work_path']}/haikuporter/haikuporter",
-			@porter_arguments, "#{task['name']}-#{task['version']}")
-		#result = system "#{@settings['general']['work_path']}/haikuporter/haikuporter #{@porter_arguments} #{task['name']}-#{task['version']} &> #{worklog}"
-		status = result ? "OK" : "Fail"
+#		worklog, result = Open3.capture2e("#{@settings['general']['work_path']}/haikuporter/haikuporter",
+#			@porter_arguments, "#{task['name']}-#{task['version']}")
+#		#result = system "#{@settings['general']['work_path']}/haikuporter/haikuporter #{@porter_arguments} #{task['name']}-#{task['version']} &> #{worklog}"
+#		status = result ? "OK" : "Fail"
 		putwork(status, worklog, task['id'])
     end
 end
 
 puts "Haiku Package Build System Client #{@version}"
 puts "  Server: #{@settings['server']['url']}"
-puts "  Threads: #{@settings['general']['threads']}"
 puts "  Work Path: #{@settings['general']['work_path']}"
 puts ""
 puts "+ Entering main work loop..."
