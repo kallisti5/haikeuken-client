@@ -64,28 +64,21 @@ puts "                Version #{@version}"
 puts ''
 
 # Load some basic platform info
-hostname = `uname -n`
-platform = `uname -s`
-architecture = `uname -m`
+@hostname = `uname -n`
+@platform = `uname -s`
+@architecture = `uname -m`
+@revision = `uname -m`.to_s.split(' ')[0]
 
 # Clean up vars
-hostname.delete!("\n")
-platform.delete!("\n")
-architecture.delete!("\n")
-
-# Check for default hostname
-if hostname == "shredder"
-	error("Default hostname of #{hostname} detected. Change it to something unique.")
-end
-puts "Starting buildslave on #{hostname} (#{platform}, #{architecture})"
-
-threads = `sysinfo | grep 'CPU #' | wc -l`.to_i
+@hostname.delete!("\n")
+@platform.delete!("\n")
+@architecture.delete!("\n")
 
 begin
-	if platform == "Linux"
+	if @platform == "Linux"
 		settings_dir = `echo -n ~`
 		warning("Running on Linux. We don't support non-native platforms yet.")
-	elsif platform == "Haiku"
+	elsif @platform == "Haiku"
 		settings_dir = `finddir B_USER_SETTINGS_DIRECTORY`
 		settings_dir.delete!("\n")
 	end
@@ -95,10 +88,42 @@ rescue
 	error("Problem loading configuration file at #{settings_dir}/haikeuken.yml")
 end
 
-@remote_uri = "#{@settings['server']['url']}/builders/#{hostname}"
+# Check for default hostname
+if @hostname == "shredder"
+	error("Default hostname of #{@hostname} detected. Change it to something unique.")
+end
+if @settings['general']['hostname']
+	@hostname = @settings['general']['hostname']
+end
+
+puts "Starting buildslave on #{@hostname} (#{@platform}, #{@architecture})"
+
+threads = `sysinfo | grep 'CPU #' | wc -l`.to_i
+
+# old + busted
+@remote_uri = "#{@settings['server']['url']}/builders/#{@hostname}"
+
+# new hotness
+@remote_api = "#{@settings['server']['url']}/api/v1"
+
 @porter_arguments = "-y -v --no-dependencies"
 
 #puts @settings.inspect
+
+def heartbeat()
+	uri = URI("#{@remote_uri}/heartbeat/#{@hostname}")
+	begin
+	Net::HTTP.post_form uri, {"token" => @settings['general']['token'],
+		"architecture" => @architecture, "version" => @version,
+		"revision" => @revision, "platform" => @platform}
+	rescue
+		puts "=========================================="
+		puts "Error: Server #{uri}"
+		puts "=========================================="
+		#log.close
+		return nil
+	end
+end
 
 def getwork()
 	uri = URI("#{@remote_uri}/getwork?token=#{@settings['general']['token']}")
@@ -140,7 +165,7 @@ end
 def refrepo()
 	# Clone or update haikuporter
 	if ! Dir.exists?("./haikuporter")
-		system 'git clone https://bitbucket.org/haikuports/haikuporter.git ./haikuporter'
+		system 'git clone https://github.com/haikuports/haikuporter.git ./haikuporter'
 	else
 		Dir.chdir("./haikuporter")
 		system 'git pull --rebase'
@@ -155,7 +180,7 @@ def refrepo()
 
 	# Clone or update haikuports
 	if ! Dir.exists?("./haikuports")
-		system 'git clone https://bitbucket.org/haikuports/haikuports.git ./haikuports'
+		system 'git clone https://github.com/haikuports/haikuports.git ./haikuports'
 	else
 		Dir.chdir("./haikuports")
 		system 'git pull --rebase'
@@ -186,7 +211,7 @@ def loop()
 #			@porter_arguments, "#{task['name']}-#{task['version']}")
 #		#result = system "#{@settings['general']['work_path']}/haikuporter/haikuporter #{@porter_arguments} #{task['name']}-#{task['version']} &> #{worklog}"
 #		status = result ? "OK" : "Fail"
-		putwork(status, worklog, task['id'])
+		#putwork(status, worklog, task['id'])
     end
 end
 
@@ -206,6 +231,8 @@ while(1)
 	# Disabled for testing
 	#puts "+ Refreshing repos..."
 	#refrepo()
+
+	heartbeat
 
 	loop()
 	puts "+ Resting for #{@rest_period} seconds..."
