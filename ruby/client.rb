@@ -67,7 +67,7 @@ puts ''
 @hostname = `uname -n`
 @platform = `uname -s`
 @architecture = `uname -m`
-@revision = `uname -m`.to_s.split(' ')[0]
+@revision = `uname -v`.to_s.split(' ')[0]
 
 # Clean up vars
 @hostname.delete!("\n")
@@ -111,7 +111,7 @@ threads = `sysinfo | grep 'CPU #' | wc -l`.to_i
 #puts @settings.inspect
 
 def heartbeat()
-	uri = URI("#{@remote_uri}/heartbeat/#{@hostname}")
+	uri = URI("#{@remote_api}/heartbeat/#{@hostname}")
 	begin
 	Net::HTTP.post_form uri, {"token" => @settings['general']['token'],
 		"architecture" => @architecture, "version" => @version,
@@ -210,8 +210,10 @@ def loop()
 #		worklog, result = Open3.capture2e("#{@settings['general']['work_path']}/haikuporter/haikuporter",
 #			@porter_arguments, "#{task['name']}-#{task['version']}")
 #		#result = system "#{@settings['general']['work_path']}/haikuporter/haikuporter #{@porter_arguments} #{task['name']}-#{task['version']} &> #{worklog}"
-#		status = result ? "OK" : "Fail"
-		#putwork(status, worklog, task['id'])
+		worklog = "quack!"
+		result = false
+		status = result ? "OK" : "Fail"
+		putwork(status, worklog, task['id'])
     end
 end
 
