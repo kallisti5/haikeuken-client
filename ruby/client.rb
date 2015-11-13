@@ -9,12 +9,15 @@
 @version = "0.2"
 @rest_period = 5.0
 
+gem 'git'
+
 ##########################################
 # Requirements
 ##########################################
 require 'json'
 require 'net/http'
 require 'yaml'
+require 'git'
 ##########################################
 
 class String
@@ -40,13 +43,20 @@ end
 
 ##########################################
 # Helper functions
+def info(message)
+	puts "[info]    #{message}".gray
+end
+
+def notice(message)
+	puts "[notice]  #{message}".green
+end
+
 def warning(message)
-	puts "Warning: #{message}".blue
+	puts "[warning] #{message}".blue
 end
 
 def error(message)
-	puts "Error: #{message}".red
-	exit 1
+	puts "[error]   #{message}".red
 end
 #
 ##########################################
@@ -68,6 +78,7 @@ puts ''
 @platform = `uname -s`
 @architecture = `uname -m`
 @revision = `uname -v`.to_s.split(' ')[0]
+@threads = 1
 
 # Clean up vars
 @hostname.delete!("\n")
@@ -77,28 +88,33 @@ puts ''
 begin
 	if @platform == "Linux"
 		settings_dir = `echo -n ~`
-		warning("Running on Linux. We don't support non-native platforms yet.")
+		warning("Running on Linux. We don't support non-Haiku platforms yet.")
+		@threads = open('/proc/cpuinfo') { |f| f.grep(/^processor/) }.count
 	elsif @platform == "Haiku"
 		settings_dir = `finddir B_USER_SETTINGS_DIRECTORY`
 		settings_dir.delete!("\n")
+		@threads = `sysinfo | grep 'CPU #' | wc -l`.to_i
 	end
 	# Load settings YAML
+	info("Load settings from #{settings_dir}/haikeuken.yml")
 	@settings = YAML::load_file("#{settings_dir}/haikeuken.yml")
 rescue
 	error("Problem loading configuration file at #{settings_dir}/haikeuken.yml")
+	exit 1
 end
+
+puts ""
 
 # Check for default hostname
 if @hostname == "shredder"
 	error("Default hostname of #{@hostname} detected. Change it to something unique.")
+	exit 1
 end
 if @settings['general']['hostname']
 	@hostname = @settings['general']['hostname']
 end
 
-puts "Starting buildslave on #{@hostname} (#{@platform}, #{@architecture})"
-
-threads = `sysinfo | grep 'CPU #' | wc -l`.to_i
+info("Starting buildslave on #{@hostname} (#{@platform}, #{@architecture})")
 
 # old + busted
 @remote_uri = "#{@settings['server']['url']}/builders/#{@hostname}"
@@ -117,22 +133,22 @@ def heartbeat()
 		"architecture" => @architecture, "version" => @version,
 		"revision" => @revision, "platform" => @platform}
 	rescue
-		puts "=========================================="
-		puts "Error: Server #{uri}"
-		puts "=========================================="
+		warning("Server #{uri} heartbeat failure.")
 		#log.close
 		return nil
 	end
 end
 
 def getwork()
-	uri = URI("#{@remote_uri}/getwork?token=#{@settings['general']['token']}")
+	uri = URI("#{@remote_api}/work/#{@hostname}?token=#{@settings['general']['token']}")
 	begin
 		json = JSON.parse(Net::HTTP.get(uri))
 	rescue
-		puts "=========================================="
-		puts "Error: Server #{uri}"
-		puts "  Returned invalid JSON data!"
+		error("Server #{uri} returned invalid JSON data!")
+		return nil
+	end
+	if json.keys.include?("error")
+		error("Server error: #{json.fetch("error", "unknown")}")
 		return nil
 	end
 	return json
@@ -152,9 +168,7 @@ def putwork(status, buildlog, build_id)
 		#	http.request(req)
 		#end
 	rescue
-		puts "=========================================="
-		puts "Error: Server #{uri}"
-		puts "=========================================="
+		error("Server #{uri} did not accept work!")
 		#log.close
 		return nil
 	end
@@ -190,7 +204,7 @@ end
 
 
 def loop()
-	puts "+ Checking for new work..."
+	info("Checking for new work...")
 
 	work = getwork()
 
@@ -199,14 +213,14 @@ def loop()
 	# do one task.
 
 	if work == nil or work.count == 0
-		puts "- No work available"
+		notice("No work available")
 		return 0
 	end
 
 	work.each do |task|
-		puts "+ Work received"
+		notice("Work received")
 		#worklog = "/tmp/#{task['name']}-#{task['version']}-#{task['revision']}.log"
-		puts "+ Building #{task['name']}-#{task['version']}-#{task['revision']}"
+		notice("Building #{task['name']}-#{task['version']}-#{task['revision']}")
 #		worklog, result = Open3.capture2e("#{@settings['general']['work_path']}/haikuporter/haikuporter",
 #			@porter_arguments, "#{task['name']}-#{task['version']}")
 #		#result = system "#{@settings['general']['work_path']}/haikuporter/haikuporter #{@porter_arguments} #{task['name']}-#{task['version']} &> #{worklog}"
@@ -217,11 +231,12 @@ def loop()
     end
 end
 
-puts "Haiku Package Build System Client #{@version}"
-puts "  Server: #{@settings['server']['url']}"
-puts "  Work Path: #{@settings['general']['work_path']}"
+info("Haiku Package Build System Client #{@version}")
+info("  Server: #{@settings['server']['url']}")
+info("  Work Path: #{@settings['general']['work_path']}")
+info("  Threads: #{@threads}")
 puts ""
-puts "+ Entering main work loop..."
+notice("Entering main work loop")
 
 # Create work_path if it doesn't exist
 if ! Dir.exists?(@settings['general']['work_path'])
@@ -237,6 +252,6 @@ while(1)
 	heartbeat
 
 	loop()
-	puts "+ Resting for #{@rest_period} seconds..."
+	notice("Resting for #{@rest_period} seconds...")
 	sleep(@rest_period)
 end
