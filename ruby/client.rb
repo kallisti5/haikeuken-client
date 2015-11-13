@@ -18,6 +18,8 @@ require 'json'
 require 'net/http'
 require 'yaml'
 require 'git'
+
+require 'pp'
 ##########################################
 
 class String
@@ -211,14 +213,21 @@ def loop()
 	# The server could also return a list of tasks,
 	# and we could do work.each. For now we just
 	# do one task.
+	if work == nil
+		error("Invalid response from server!")
+		exit 1
+	end
 
-	if work == nil or work.count == 0
+	result = work.fetch("result", "fail")
+	if result != "available"
 		notice("No work available")
 		return 0
 	end
 
-	work.each do |task|
-		notice("Work received")
+	notice("Work received")
+
+	pp work
+	work.fetch("tasks").each do |task|
 		#worklog = "/tmp/#{task['name']}-#{task['version']}-#{task['revision']}.log"
 		notice("Building #{task['name']}-#{task['version']}-#{task['revision']}")
 #		worklog, result = Open3.capture2e("#{@settings['general']['work_path']}/haikuporter/haikuporter",
