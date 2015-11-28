@@ -7,7 +7,7 @@
 ##############################################
 
 @version = "0.2"
-@rest_period = 5.0
+@rest_period = 10.0
 
 gem 'git'
 
@@ -81,6 +81,9 @@ puts ''
 @architecture = `uname -m`
 @revision = `uname -v`.to_s.split(' ')[0]
 @threads = 1
+@settings = []
+
+@current_build = nil
 
 # Clean up vars
 @hostname.delete!("\n")
@@ -105,6 +108,7 @@ rescue
 	exit 1
 end
 
+pp @settings
 puts ""
 
 # Check for default hostname
@@ -118,9 +122,6 @@ end
 
 info("Starting buildslave on #{@hostname} (#{@platform}, #{@architecture})")
 
-# old + busted
-@remote_uri = "#{@settings['server']['url']}/builders/#{@hostname}"
-
 # new hotness
 @remote_api = "#{@settings['server']['url']}/api/v1"
 
@@ -133,7 +134,9 @@ def heartbeat()
 	begin
 	Net::HTTP.post_form uri, {"token" => @settings['general']['token'],
 		"architecture" => @architecture, "version" => @version,
-		"revision" => @revision, "platform" => @platform}
+		"revision" => @revision, "platform" => @platform,
+		"threads" => @threads,
+		"build" => (@current_job != nil) ? @current_job : "idle"}
 	rescue
 		warning("Server #{uri} heartbeat failure.")
 		#log.close
@@ -237,7 +240,7 @@ def loop()
 		result = false
 		status = result ? "OK" : "Fail"
 		putwork(status, worklog, task['id'])
-    end
+	end
 end
 
 info("Haiku Package Build System Client #{@version}")
@@ -252,7 +255,7 @@ if ! Dir.exists?(@settings['general']['work_path'])
 	Dir.mkdir(@settings['general']['work_path'])
 end
 Dir.chdir(@settings['general']['work_path'])
-	
+
 while(1)
 	# Disabled for testing
 	#puts "+ Refreshing repos..."
@@ -260,7 +263,7 @@ while(1)
 
 	heartbeat
 
-	loop()
+	#loop()
 	notice("Resting for #{@rest_period} seconds...")
 	sleep(@rest_period)
 end
