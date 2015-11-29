@@ -18,6 +18,7 @@ require 'json'
 require 'net/http'
 require 'yaml'
 require 'git'
+require 'open3'
 
 require 'pp'
 ##########################################
@@ -125,7 +126,7 @@ info("Starting buildslave on #{@hostname} (#{@platform}, #{@architecture})")
 # new hotness
 @remote_api = "#{@settings['server']['url']}/api/v1"
 
-@porter_arguments = "-y -v --no-dependencies"
+@porter_arguments = "-y -v --no-dependencies -j#{@threads}"
 
 #puts @settings.inspect
 
@@ -235,12 +236,15 @@ def loop()
 		@current_build = build.fetch('id', nil)
 		notice("Building #{build['name']}-#{build['version']}-#{build['revision']}")
 
-#		worklog, result = Open3.capture2e("#{@settings['general']['work_path']}/haikuporter/haikuporter",
-#			@porter_arguments, "#{task['name']}-#{task['version']}")
-#		#result = system "#{@settings['general']['work_path']}/haikuporter/haikuporter #{@porter_arguments} #{task['name']}-#{task['version']} &> #{worklog}"
-		worklog = "quack!"
-		result = 1
-		sleep(30)
+		# Clean
+		Open3.capture2e("#{@settings['general']['work_path']}/haikuporter/haikuporter " \
+			"#{@porter_arguments} -c #{build['name']}-#{build['version']}")
+
+		worklog, result = Open3.capture2e("#{@settings['general']['work_path']}/haikuporter/haikuporter " \
+			"#{@porter_arguments} #{build['name']}-#{build['version']}")
+		#result = system "#{@settings['general']['work_path']}/haikuporter/haikuporter #{@porter_arguments} #{task['name']}-#{task['version']} &> #{worklog}"
+		#worklog = "quack!"
+		#result = 1
 		postwork(result, worklog, build['id'])
 	else
 		notice("Unknown command from server!")
