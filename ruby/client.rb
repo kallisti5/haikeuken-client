@@ -19,6 +19,7 @@ require 'net/http'
 require 'yaml'
 require 'git'
 require 'open3'
+require 'thread'
 
 require 'pp'
 ##########################################
@@ -131,6 +132,9 @@ info("Starting buildslave on #{@hostname} (#{@platform}, #{@architecture})")
 #puts @settings.inspect
 
 def heartbeat()
+	while true
+	info("heartbeat <3")
+
 	uri = URI("#{@remote_api}/heartbeat/#{@hostname}")
 	begin
 	Net::HTTP.post_form uri, {"token" => @settings['general']['token'],
@@ -140,8 +144,8 @@ def heartbeat()
 		"build" => (@current_build != nil) ? @current_build : 0}
 	rescue
 		warning("Server #{uri} heartbeat failure.")
-		#log.close
-		return nil
+	end
+	sleep(10.0)
 	end
 end
 
@@ -164,21 +168,14 @@ end
 def postwork(result, buildlog, build_id)
 	uri = URI("#{@remote_api}/work/#{@hostname}?token=#{@settings['general']['token']}")
 
-	#log = File.open(buildlog, "rb")
-
 	begin
 		Net::HTTP.post_form uri, {"token" => @settings['general']['token'],
 			"build_id" => build_id.to_i, "result" => result.to_i,
 			"details" => buildlog}
-		#Net::HTTP.start(uri.hostname, uri.port) do |http|
-		#	http.request(req)
-		#end
 	rescue
 		error("Server #{uri} did not accept work!")
-		#log.close
 		return nil
 	end
-	#log.close
 end
 
 
@@ -209,9 +206,13 @@ def refrepo()
 end
 
 
-def loop()
-	info("Checking for new work...")
+def main()
+	while true
+	# Disabled for testing
+	notice("Refreshing repos...")
+	refrepo()
 
+	info("Checking for new work...")
 	work = getwork()
 
 	# The server could also return a list of tasks,
@@ -242,12 +243,14 @@ def loop()
 
 		worklog, result = Open3.capture2e("#{@settings['general']['work_path']}/haikuporter/haikuporter " \
 			"#{@porter_arguments} #{build['name']}-#{build['version']}")
-		#result = system "#{@settings['general']['work_path']}/haikuporter/haikuporter #{@porter_arguments} #{task['name']}-#{task['version']} &> #{worklog}"
-		#worklog = "quack!"
-		#result = 1
+
 		postwork(result, worklog, build['id'])
 	else
 		notice("Unknown command from server!")
+	end
+
+	notice("Resting for #{@rest_period} seconds...")
+	sleep(@rest_period)
 	end
 end
 
@@ -264,14 +267,13 @@ if ! Dir.exists?(@settings['general']['work_path'])
 end
 Dir.chdir(@settings['general']['work_path'])
 
-while(1)
-	# Disabled for testing
-	puts "+ Refreshing repos..."
-	#refrepo()
 
-	heartbeat
+# Set up our threads
+hbThread = Thread.new{heartbeat()}
+mainThread = Thread.new{main()}
+hbThread.run
+mainThread.run
 
-	loop()
-	notice("Resting for #{@rest_period} seconds...")
-	sleep(@rest_period)
-end
+# Reunited at last
+hbThread.join
+mainThread.join
