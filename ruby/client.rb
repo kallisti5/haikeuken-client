@@ -83,7 +83,7 @@ puts ''
 @threads = 1
 @settings = []
 
-@current_build = nil
+@current_build = 0
 
 # Clean up vars
 @hostname.delete!("\n")
@@ -136,7 +136,7 @@ def heartbeat()
 		"architecture" => @architecture, "version" => @version,
 		"revision" => @revision, "platform" => @platform,
 		"threads" => @threads,
-		"build" => (@current_job != nil) ? @current_job : "idle"}
+		"build" => (@current_build != nil) ? @current_build : 0}
 	rescue
 		warning("Server #{uri} heartbeat failure.")
 		#log.close
@@ -160,15 +160,15 @@ def getwork()
 end
 
 
-def putwork(status, buildlog, build_id)
-	uri = URI("#{@remote_uri}/putwork")
+def postwork(result, buildlog, build_id)
+	uri = URI("#{@remote_api}/work/#{@hostname}?token=#{@settings['general']['token']}")
 
 	#log = File.open(buildlog, "rb")
 
 	begin
 		Net::HTTP.post_form uri, {"token" => @settings['general']['token'],
-			"status" => status, "build_id" => build_id,
-			"result" => buildlog}
+			"build_id" => build_id.to_i, "result" => result.to_i,
+			"details" => buildlog}
 		#Net::HTTP.start(uri.hostname, uri.port) do |http|
 		#	http.request(req)
 		#end
@@ -221,25 +221,29 @@ def loop()
 		exit 1
 	end
 
-	result = work.fetch("result", "fail")
-	if result != "available"
+	command = work.fetch('command', nil)
+
+	if command == 'none'
 		notice("No work available")
 		return 0
 	end
 
-	notice("Work received")
+	notice("#{command} received")
 
-	pp work
-	work.fetch("tasks").each do |task|
-		#worklog = "/tmp/#{task['name']}-#{task['version']}-#{task['revision']}.log"
-		notice("Building #{task['name']}-#{task['version']}-#{task['revision']}")
+	if command == "build"
+		build = work.fetch(command, nil)
+		@current_build = build.fetch('id', nil)
+		notice("Building #{build['name']}-#{build['version']}-#{build['revision']}")
+
 #		worklog, result = Open3.capture2e("#{@settings['general']['work_path']}/haikuporter/haikuporter",
 #			@porter_arguments, "#{task['name']}-#{task['version']}")
 #		#result = system "#{@settings['general']['work_path']}/haikuporter/haikuporter #{@porter_arguments} #{task['name']}-#{task['version']} &> #{worklog}"
 		worklog = "quack!"
-		result = false
-		status = result ? "OK" : "Fail"
-		putwork(status, worklog, task['id'])
+		result = 1
+		sleep(30)
+		postwork(result, worklog, build['id'])
+	else
+		notice("Unknown command from server!")
 	end
 end
 
@@ -258,12 +262,12 @@ Dir.chdir(@settings['general']['work_path'])
 
 while(1)
 	# Disabled for testing
-	#puts "+ Refreshing repos..."
+	puts "+ Refreshing repos..."
 	#refrepo()
 
 	heartbeat
 
-	#loop()
+	loop()
 	notice("Resting for #{@rest_period} seconds...")
 	sleep(@rest_period)
 end
